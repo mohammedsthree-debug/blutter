@@ -41,9 +41,11 @@ jobs:
         run: |
           pip install pyelftools requests
 
-      - name: Clone Blutter
+      - name: Setup Blutter source
         run: |
-          git clone --depth 1 https://github.com/worawit/blutter.git /tmp/blutter
+          mkdir -p /tmp/blutter
+          cp -r ./* /tmp/blutter/
+
 
       - name: Extract native libraries
         run: |
