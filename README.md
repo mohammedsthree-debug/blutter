@@ -1,35 +1,98 @@
-# Blutter CI - Oxford Dictionary Flutter Analysis
+# B(l)utter
+Flutter Mobile Application Reverse Engineering Tool by Compiling Dart AOT Runtime
 
-Automated Blutter reverse engineering pipeline for Flutter apps, running on GitHub Actions.
+Currently the application supports only Android libapp.so (arm64 only).
+Also the application is currently work only against recent Dart versions.
 
-## Setup
+For high priority missing features, see [TODO](#todo)
 
-1. Create a new GitHub repo (private recommended)
-2. Copy this entire directory to it
-3. Place your Flutter app's native libraries in `libs/`:
-   - `libs/libapp.so`
-   - `libs/libflutter.so`
-4. Push and trigger the workflow
 
-## Quick Start
+## Environment Setup
+This application uses C++20 Formatting library. It requires very recent C++ compiler such as g++>=13, Clang>=16.
 
-```bash
-# This script does it all — just set your GitHub username
-./setup_and_push.ps1
+I recommend using Linux OS (only tested on Deiban sid/trixie) because it is easy to setup.
+
+### Debian Unstable (gcc 13)
+**_NOTE:_**
+Use ONLY Debian/Ubuntu version that provides gcc>=13 from its own main repository.
+Using ported gcc to old Debian/Ubuntu version does not work.
+
+- Install build tools and depenencies
+```
+apt install python3-pyelftools python3-requests git cmake ninja-build \
+    build-essential pkg-config libicu-dev libcapstone-dev
 ```
 
-## What It Does
+### Windows
+- Install git and python 3
+- Install latest Visual Studio with "Desktop development with C++" and "C++ CMake tools"
+- Install required libraries (libcapstone and libicu4c)
+```
+python scripts\init_env_win.py
+```
+- Start "x64 Native Tools Command Prompt"
 
-1. **Compiles Blutter** from source on Ubuntu with g++-13 + cmake + ninja
-2. **Analyzes `libapp.so`** to reconstruct Dart classes, methods, and function offsets
-3. **Auto-greps** for licensing/premium/purchase/subscription symbols
-4. **Uploads artifacts**:
-   - `blutter-analysis-*` — Full analysis archive
-   - `blutter-asm-*` — Reconstructed Dart ASM files
-   - `blutter-frida-*` — Auto-generated Frida hook scripts
+### macOS Sequoia
+- Install XCode
+- Install required tools
+```
+brew install cmake ninja pkg-config icu4c capstone
+pip3 install pyelftools requests
+```
 
-## Files
+### macOS Ventura and Sonoma (clang 16)
+- Install XCode
+- Install clang 16 and required tools
+```
+brew install llvm@16 cmake ninja pkg-config icu4c capstone
+pip3 install pyelftools requests
+```
 
-- `.github/workflows/blutter_analysis.yml` — CI workflow
-- `libs/` — Place libapp.so + libflutter.so here
-- `.gitattributes` — LFS config for large .so files
+## Usage
+Extract "lib" directory from apk file
+```
+python3 blutter.py path/to/app/lib/arm64-v8a out_dir
+```
+The blutter.py will automatically detect the Dart version from the flutter engine and call executable of blutter to get the information from libapp.so.
+
+If the blutter executable for required Dart version does not exists, the script will automatically checkout Dart source code and compiling it.
+
+## Update
+You can use ```git pull``` to update and run blutter.py with ```--rebuild``` option to force rebuild the executable
+```
+python3 blutter.py path/to/app/lib/arm64-v8a out_dir --rebuild
+```
+
+## Output files
+- **asm/\*** libapp assemblies with symbols
+- **blutter_frida.js** the frida script template for the target application
+- **objs.txt** complete (nested) dump of Object from Object Pool
+- **pp.txt** all Dart objects in Object Pool
+
+
+## Directories
+- **bin** contains blutter executables for each Dart version in "blutter_dartvm\<ver\>\_\<os\>\_\<arch\>" format
+- **blutter** contains source code. need building against Dart VM library
+- **build** contains building projects which can be deleted after finishing the build process
+- **dartsdk** contains checkout of Dart Runtime which can be deleted after finishing the build process
+- **external** contains 3rd party libraries for Windows only
+- **packages** contains the static libraries of Dart Runtime
+- **scripts** contains python scripts for getting/building Dart
+
+
+## Generating Visual Studio Solution for Development
+I use Visual Studio to delevlop Blutter on Windows. ```--vs-sln``` options can be used to generate a Visual Studio solution.
+```
+python blutter.py path\to\lib\arm64-v8a build\vs --vs-sln
+```
+
+## TODO
+- More code analysis
+  - Function arguments and return type
+  - Some psuedo code for code pattern
+- Generate better Frida script
+  - More internal classes
+  - Object modification
+- Obfuscated app (still missing many functions)
+- Reading iOS binary
+- Input as apk or ipa

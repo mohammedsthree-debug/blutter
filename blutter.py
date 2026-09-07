@@ -8,8 +8,10 @@ import shutil
 import subprocess
 import sys
 import zipfile
-import tempfile
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, 'scripts'))
 from dartvm_fetch_build import DartLibInfo
+
 
 CMAKE_CMD = "cmake"
 NINJA_CMD = "ninja"
