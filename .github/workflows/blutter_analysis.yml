@@ -25,12 +25,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build g++-13 \
+            cmake ninja-build build-essential \
             libcapstone-dev libicu-dev \
             python3 python3-pip \
             unzip p7zip-full
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
-          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100
+
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -74,9 +73,7 @@ jobs:
         run: |
           cd /tmp/blutter
           python3 blutter.py /tmp/flutter_libs /tmp/blutter_output 2>&1 | tee /tmp/blutter_build.log
-        env:
-          CC: gcc-13
-          CXX: g++-13
+
 
       - name: Generate analysis summary
         if: always()
