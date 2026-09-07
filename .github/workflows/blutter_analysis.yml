@@ -71,8 +71,8 @@ jobs:
 
       - name: Run Blutter analysis
         run: |
-          cd /tmp/blutter
           python3 blutter.py /tmp/flutter_libs /tmp/blutter_output 2>&1 | tee /tmp/blutter_build.log
+
 
 
       - name: Generate analysis summary
