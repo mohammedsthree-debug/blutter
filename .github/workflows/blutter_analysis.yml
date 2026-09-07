@@ -1,0 +1,160 @@
+name: Blutter Flutter Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'App name (for labeling output)'
+        required: true
+        default: 'oxford_dictionary'
+      dart_version:
+        description: 'Dart version (auto-detected if empty)'
+        required: false
+        default: ''
+
+jobs:
+  analyze:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build g++-13 \
+            libcapstone-dev libicu-dev \
+            python3 python3-pip \
+            unzip p7zip-full
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install pyelftools requests
+
+      - name: Clone Blutter
+        run: |
+          git clone --depth 1 https://github.com/worawit/blutter.git /tmp/blutter
+
+      - name: Extract native libraries
+        run: |
+          mkdir -p /tmp/flutter_libs
+          
+          # Extract from the ARM64 split APK
+          if [ -f "libs/libapp.so" ] && [ -f "libs/libflutter.so" ]; then
+            echo "Using pre-committed .so files"
+            cp libs/libapp.so libs/libflutter.so /tmp/flutter_libs/
+          elif [ -f "apks/split_config.arm64_v8a.apk" ]; then
+            echo "Extracting from split APK"
+            cd /tmp/flutter_libs
+            unzip -jo "$GITHUB_WORKSPACE/apks/split_config.arm64_v8a.apk" "lib/arm64-v8a/*.so" || true
+          else
+            echo "ERROR: No .so files or APKs found!"
+            echo "Place libapp.so + libflutter.so in libs/ or split APK in apks/"
+            exit 1
+          fi
+          
+          echo "=== Extracted libraries ==="
+          ls -lh /tmp/flutter_libs/
+          file /tmp/flutter_libs/libapp.so
+          file /tmp/flutter_libs/libflutter.so
+
+      - name: Run Blutter analysis
+        run: |
+          cd /tmp/blutter
+          python3 blutter.py /tmp/flutter_libs /tmp/blutter_output 2>&1 | tee /tmp/blutter_build.log
+        env:
+          CC: gcc-13
+          CXX: g++-13
+
+      - name: Generate analysis summary
+        if: always()
+        run: |
+          OUTPUT=/tmp/blutter_output
+          if [ -d "$OUTPUT" ]; then
+            echo "=== Blutter Output Files ==="
+            find $OUTPUT -type f | head -50
+            
+            echo ""
+            echo "=== File Sizes ==="
+            du -sh $OUTPUT/*
+            
+            # Extract key findings
+            if [ -f "$OUTPUT/asm/stats.txt" ]; then
+              echo ""
+              echo "=== Analysis Stats ==="
+              cat "$OUTPUT/asm/stats.txt"
+            fi
+            
+            # Count classes and functions
+            if [ -d "$OUTPUT/asm" ]; then
+              echo ""
+              echo "=== Class/Function Count ==="
+              find "$OUTPUT/asm" -name "*.dart" | wc -l
+              echo " Dart files found"
+            fi
+            
+            # Search for licensing/premium/purchase related code
+            echo ""
+            echo "=== License/Premium/Purchase References ==="
+            grep -rn -i "premium\|license\|purchase\|subscription\|isPro\|isActive\|unlock" \
+              "$OUTPUT/asm/" 2>/dev/null | head -100 || echo "No matches found"
+            
+            echo ""
+            echo "=== IAP / Billing References ==="
+            grep -rn -i "billing\|inapp\|iap\|queryPurchase\|BillingClient\|ProductDetails" \
+              "$OUTPUT/asm/" 2>/dev/null | head -50 || echo "No matches found"
+              
+            echo ""
+            echo "=== SharedPreferences / Storage References ==="
+            grep -rn -i "SharedPreferences\|getShared\|putBool\|getString\|license_level\|wordoftheday" \
+              "$OUTPUT/asm/" 2>/dev/null | head -50 || echo "No matches found"
+          fi
+
+      - name: Package Blutter output
+        if: always()
+        run: |
+          cd /tmp
+          # Create a focused archive with the most useful files
+          tar czf blutter_analysis_${{ github.event.inputs.app_name }}.tar.gz \
+            blutter_output/ \
+            blutter_build.log \
+            2>/dev/null || true
+
+      - name: Upload Blutter analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blutter-analysis-${{ github.event.inputs.app_name }}
+          path: |
+            /tmp/blutter_analysis_${{ github.event.inputs.app_name }}.tar.gz
+          retention-days: 30
+
+      - name: Upload raw ASM output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blutter-asm-${{ github.event.inputs.app_name }}
+          path: |
+            /tmp/blutter_output/asm/
+          retention-days: 30
+
+      - name: Upload Frida scripts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blutter-frida-${{ github.event.inputs.app_name }}
+          path: |
+            /tmp/blutter_output/ida_script/
+            /tmp/blutter_output/frida/
+          retention-days: 30
+          if-no-files-found: ignore
